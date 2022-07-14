@@ -1,0 +1,67 @@
+---
+- hosts: all
+  vars:
+    home: "{{ ansible_env.HOME }}"
+    src_home: "{{ home }}/dev"
+    applications:
+      - adguard
+      - bitwarden
+      - discord
+      - iterm2
+      - raycast
+      - slack
+      - visual-studio-code
+    binaries:
+      - exa
+      - git
+      - git-lfs
+      - nvim
+
+  tasks:
+    - name: Look for xcode tools
+      shell: xcode-select -p > /dev/null
+      register: has_xcode
+
+    - name: Validate xcode tools
+      fail:
+        msg: "Run xcode-select --install to install the xcode developer tools"
+      when: has_xcode.rc != 0
+
+    - name: Create src folder
+      file: path={{ src_home }} state=directory
+
+    - name: Symlink dotfiles
+      file: path={{ home }}/{{ item }} src={{ playbook_dir }}/resources/{{ item }} state=link
+      with_items:
+        - .zshrc
+
+    - name: Install oh-my-zsh
+      shell:
+        cmd: sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+      environment:
+        ZSH: "{{ home }}/.oh-my-zsh"
+        KEEP_ZSHRC: yes
+        CHSH: no
+        RUNZSH: no
+
+    - name: Install lunarvim
+      shell:
+        cmd: bash <(curl -s https://raw.githubusercontent.com/lunarvim/lunarvim/master/utils/installer/install.sh)
+
+    - name: Check if Homebrew is already installed
+      stat:
+        path: /usr/local/bin/brew
+      register: 
+
+    - name: Install homebrew
+      script: "{{ playbook_dir }}/resources/install-homebrew.sh"
+      when: not b.stat.exists 
+
+    - name: Install brew packages
+      homebrew: name={{ item }} state=present
+      with_items: binaries
+
+    - name: Install applications with brew-cask
+      shell: brew cask install {{ item }}
+      with_items: applications
+
